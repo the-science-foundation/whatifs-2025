@@ -1,5 +1,5 @@
 // Usage:
-// 1. Copy this script as a file in your Appscript project. You can name it any way you like e.g. submission_sync_tools.gs
+// 1. Copy this script as a file in your appscript project. You can name it any way you like e.g. submission_sync_tools.gs
 // 2. Create another "runner" script file in the same project - it can use any function from the first submission_sync_tools.gs file directly without importing it.
 //    See: https://stackoverflow.com/questions/72843003/how-to-reference-one-apps-script-file-from-another
 // 3. Add the following invocation to the runner script file - make sure to replace SOURCE_SHEET_ID and TARGET_FOLDER_ID with actual drive ids:
@@ -10,16 +10,17 @@
 
 
 // Sheet column names
-// TODO: replace with the correct ones if needed
-const PROJECT_TITLE_COLUMN_NAME = "Project Title";
 const SUBMITTER_NAME_COLUMN_NAME = "Name";
-const CAREER_STAGE_COLUMN_NAME = 'Career Stage';
-const FIELDS_OF_SCIENCE_COLUMN_NAME = 'Fields of Science'
+const PROJECT_VIDEO_COLUMN_NAME = 'Project Video';
+const PROJECT_TITLE_COLUMN_NAME = "Project Title [50 chars, excluding spaces]";
+const FIELDS_OF_SCIENCE_COLUMN_NAME = 'Main Scientific Disciplines of your project (select one or more):'
 const PROJECT_GRAPHIC_COLUMN_NAME = 'Project Graphic';
-const SHORT_DESCRIPTION_COLUMN_NAME = 'Short Description';
-const MOTIVATION_COLUMN_NAME = 'Motivation';
-const PROJECT_VIDEO_COLUMN_NAME = 'Video';
-
+const SHORT_DESCRIPTION_COLUMN_NAME = 'What is the research question that you want to address?\n(140 characters or less)';
+const MOTIVATION_COLUMN_NAME = 'Why are you excited about this question? (140 characters or less)';
+const CAREER_STAGE_COLUMN_NAME = 'Career Stage';
+const SUBFIELDS_OF_SCIENCE_COLUMN_NAME = 'Subdisciplines of your project: write all that apply in a commas separated list. e.g. number theory, behavioral ecology, ...';
+const AMOUNT_REQUESTING_COLUMN_NAME = 'What amount are you requesting (in dollars)?';
+const FUNDING_PURPOSE_COLUMN_NAME = 'What would you spend the funds on? eg. telescope time, sequencing, travel to a field site, undergraduate assistant, ... *line-iterm budget not needed';
 
 // Main function to sync Google Sheet records to Google Drive folders.
 // For each row, it copies media files and creates a summary document.
@@ -60,6 +61,7 @@ function SheetSyncer(sourceSheetId, targetFolderId) {
       const submitterName = row[submitterNameIdx];
       const submitterCareerStage = row[header.indexOf(CAREER_STAGE_COLUMN_NAME)];
       const fieldOfScience = row[header.indexOf(FIELDS_OF_SCIENCE_COLUMN_NAME)];
+      const subfieldsOfScience = row[header.indexOf(SUBFIELDS_OF_SCIENCE_COLUMN_NAME)];
       const mainImageUrl = row[header.indexOf(PROJECT_GRAPHIC_COLUMN_NAME)];
       Logger.log(`submitterName: ${submitterName}, fieldOfScience: ${fieldOfScience}, mainImageUrl: ${mainImageUrl}`);
       const mainImageId = getFileIdFromUrl(mainImageUrl);
@@ -72,11 +74,12 @@ function SheetSyncer(sourceSheetId, targetFolderId) {
       }
       const description = row[header.indexOf(SHORT_DESCRIPTION_COLUMN_NAME)];
       const motivation = row[header.indexOf(MOTIVATION_COLUMN_NAME)];
-      //const docName = projectName;
+      const amount_requesting = row[header.indexOf(AMOUNT_REQUESTING_COLUMN_NAME)];
+      const funding_purpose = row[header.indexOf(FUNDING_PURPOSE_COLUMN_NAME)];
       const docName = "Description";
       const copiedImageId = copy_supplementary_file(mainImageId, projectFolder);
 
-      createProposalDescriptionDoc(projectFolderId, docName, submission_id, projectName, submitterName, submitterCareerStage, fieldOfScience, mainImageId, description, motivation, copiedVideoId);
+      createProposalDescriptionDoc(projectFolderId, docName, submission_id, projectName, submitterName, submitterCareerStage, fieldOfScience, subfieldsOfScience, mainImageId, description, motivation, copiedVideoId, amount_requesting, funding_purpose);
       
       Logger.log(`Created summary document for "${projectName}", ${submission_id}.`);
     } catch (e) {
@@ -102,7 +105,7 @@ function getFileIdFromUrl(url) {
 }
 
 
-function createProposalDescriptionDoc(parentFolderId, docName, submission_id, projectTitle, submitterName, submitterCareerStage, fieldOfScience, mainImageId, description, motivation, videoId) {
+function createProposalDescriptionDoc(parentFolderId, docName, submission_id, projectTitle, submitterName, submitterCareerStage, fieldOfScience, subfieldsOfScience, mainImageId, description, motivation, videoId, amount_requesting, funding_purpose) {
   const parentFolder = DriveApp.getFolderById(parentFolderId);
   const doc = DocumentApp.create(docName);
   const docFile = DriveApp.getFileById(doc.getId());
@@ -119,23 +122,28 @@ function createProposalDescriptionDoc(parentFolderId, docName, submission_id, pr
   body.appendParagraph(`Author: ${submitterName}`);
   body.appendParagraph(`Career Stage: ${submitterCareerStage}`);
   body.appendParagraph(''); // Add a blank line for spacing
-  body.appendParagraph(`Fields/Subfields of Science Involved: ${fieldOfScience}`);
+  body.appendParagraph(`Main Scientific Disciplines: ${fieldOfScience}`);
+  body.appendParagraph(`Subdisciplines: ${subfieldsOfScience}`);
   body.appendParagraph(''); // Add a blank line for spacing
 
   insert_image_into_doc(mainImageId, body);
-
   body.appendParagraph(''); // Add a blank line for spacing
-  body.appendParagraph('Description').setHeading(DocumentApp.ParagraphHeading.HEADING4);
-  body.appendParagraph(description);
-  body.appendParagraph('Motivation').setHeading(DocumentApp.ParagraphHeading.HEADING4);
-  body.appendParagraph(motivation);
-  body.appendParagraph(''); // Add a blank line for spacing  
   if (videoId) {
     const videoFile = DriveApp.getFileById(videoId);
     const videoUrl = videoFile.getUrl();
     var videoParagraph = body.appendParagraph('Link to the Video');
     videoParagraph.setLinkUrl(videoUrl);
   }
+
+  body.appendParagraph(''); // Add a blank line for spacing
+  body.appendParagraph('Description').setHeading(DocumentApp.ParagraphHeading.HEADING4);
+  body.appendParagraph(description);
+  body.appendParagraph('Why are you excited about this question?').setHeading(DocumentApp.ParagraphHeading.HEADING4);
+  body.appendParagraph(motivation);
+  body.appendParagraph(''); // Add a blank line for spacing  
+  body.appendParagraph('What would you spend the funds on?').setHeading(DocumentApp.ParagraphHeading.HEADING4);
+  body.appendParagraph(`Amount Requesting: ${amount_requesting}`);
+  body.appendParagraph(funding_purpose);
   doc.saveAndClose();
 }
 
